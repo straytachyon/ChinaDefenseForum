@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 import WebKit
 
 struct PostCard: View {
@@ -399,6 +400,8 @@ struct ImagePreview: View {
     @State private var index: Int
     @State private var dragOffset: CGFloat = 0
     @State private var zoomed = false
+    @State private var exportDocument: ImageFileDocument?
+    @State private var showExporter = false
     @Environment(\.dismiss) private var dismiss
 
     init(urls: [URL], startIndex: Int = 0) {
@@ -463,6 +466,17 @@ struct ImagePreview: View {
                     Spacer()
 
                     Button {
+                        Task { await saveCurrentImage() }
+                    } label: {
+                        Image(systemName: "square.and.arrow.down")
+                            .font(.title3)
+                            .foregroundStyle(.white)
+                            .frame(width: 44, height: 44)
+                            .contentShape(Circle())
+                    }
+                    .accessibilityLabel("Save image to Files")
+
+                    Button {
                         Task {
                             if let image = await RemoteImageLoader.load(urls[index]) {
                                 UIPasteboard.general.image = image
@@ -496,6 +510,27 @@ struct ImagePreview: View {
                 Spacer()
             }
         }
+        .fileExporter(
+            isPresented: $showExporter,
+            document: exportDocument,
+            contentType: .png,
+            defaultFilename: exportFilename
+        ) { _ in }
+    }
+
+    private var exportFilename: String {
+        let name = urls.indices.contains(index)
+            ? urls[index].deletingPathExtension().lastPathComponent
+            : "image"
+        return name.isEmpty ? "image" : name
+    }
+
+    private func saveCurrentImage() async {
+        guard urls.indices.contains(index),
+              let image = await RemoteImageLoader.load(urls[index]),
+              let data = image.pngData() else { return }
+        exportDocument = ImageFileDocument(data: data)
+        showExporter = true
     }
 }
 
@@ -724,6 +759,24 @@ struct YouTubeEmbedView: UIViewRepresentable {
 }
 
 
+struct ImageFileDocument: FileDocument {
+    static var readableContentTypes: [UTType] { [.png] }
+
+    let data: Data
+
+    init(data: Data) {
+        self.data = data
+    }
+
+    init(configuration: ReadConfiguration) throws {
+        data = configuration.file.regularFileContents ?? Data()
+    }
+
+    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
+        FileWrapper(regularFileWithContents: data)
+    }
+}
+
 /// Loads post pictures with the forum's cookies and a Referer, then lays them out
 /// with their real aspect ratio (AsyncImage collapsed to zero height inside cards).
 enum RemoteImageLoader {
@@ -754,6 +807,8 @@ struct RemoteImage<Failure: View, Loading: View>: View {
 
     @State private var image: UIImage?
     @State private var didFail = false
+    @State private var exportDocument: ImageFileDocument?
+    @State private var showExporter = false
 
     var body: some View {
         Group {
@@ -768,6 +823,13 @@ struct RemoteImage<Failure: View, Loading: View>: View {
                         } label: {
                             Label("Copy Image", systemImage: "doc.on.doc")
                         }
+                        Button {
+                            guard let data = image.pngData() else { return }
+                            exportDocument = ImageFileDocument(data: data)
+                            showExporter = true
+                        } label: {
+                            Label("Save to Files…", systemImage: "square.and.arrow.down")
+                        }
                     }
             } else if didFail {
                 failure()
@@ -776,6 +838,14 @@ struct RemoteImage<Failure: View, Loading: View>: View {
             }
         }
         .task(id: url) { await load() }
+        .fileExporter(
+            isPresented: $showExporter,
+            document: exportDocument,
+            contentType: .png,
+            defaultFilename: url.deletingPathExtension().lastPathComponent.isEmpty
+                ? "image"
+                : url.deletingPathExtension().lastPathComponent
+        ) { _ in }
     }
 
     private func load() async {
