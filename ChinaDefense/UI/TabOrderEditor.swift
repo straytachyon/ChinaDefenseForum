@@ -19,10 +19,13 @@ struct TabOrderEditor: View {
                 ForEach(boards) { board in
                     row(board)
                 }
+                .onMove { indices, destination in
+                    boards.move(fromOffsets: indices, toOffset: destination)
+                }
             } header: {
                 Text("Board tabs")
             } footer: {
-                Text("Use the arrows to move a board. “Unread” always stays first. Changes are saved immediately.")
+                Text("Drag a board by its handle to move it up or down. “Unread” always stays first. Changes are saved immediately.")
             }
 
             Section {
@@ -34,6 +37,7 @@ struct TabOrderEditor: View {
                 .disabled(boards == allBoards)
             }
         }
+        .environment(\.editMode, .constant(.active))
         .navigationTitle("Arrange Tabs")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -59,41 +63,12 @@ struct TabOrderEditor: View {
                 .lineLimit(1)
 
             Spacer(minLength: 8)
-
-            Button {
-                move(board, by: -1)
-            } label: {
-                Image(systemName: "chevron.up")
-                    .font(.body.weight(.semibold))
-                    .frame(width: 32, height: 28)
-            }
-            .buttonStyle(.borderless)
-            .disabled(index(of: board) == 0)
-            .accessibilityLabel("Move \(board.name) up")
-
-            Button {
-                move(board, by: 1)
-            } label: {
-                Image(systemName: "chevron.down")
-                    .font(.body.weight(.semibold))
-                    .frame(width: 32, height: 28)
-            }
-            .buttonStyle(.borderless)
-            .disabled(index(of: board) == boards.count - 1)
-            .accessibilityLabel("Move \(board.name) down")
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityHint("Drag to reorder this board tab")
     }
 
-    private func index(of board: ForumBoard) -> Int {
-        boards.firstIndex(of: board) ?? 0
-    }
 
-    private func move(_ board: ForumBoard, by offset: Int) {
-        guard let current = boards.firstIndex(of: board) else { return }
-        let target = current + offset
-        guard boards.indices.contains(target) else { return }
-        withAnimation(.easeInOut(duration: 0.18)) {
-            boards.swapAt(current, target)
-        }
-    }
+
+
 }
